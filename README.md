@@ -23,7 +23,7 @@ MemMgr->finalize(); // this will ensure a .dll is emitted and pdb loaded inside 
 # How it works
 
 LLVM Jit Pdb works like this :
-- a dummy .dll is written from C++ byte array embedded data to the disk (beside the .pdb user path) and loaded.
+- a dummy .dll is written from C++ embedded data to the disk (along the .pdb user path) and loaded.
 - Jitted code is allocated directly inside dll image (write access have been allowed)
 - PDB is generated based on the COFFObjectFile emitted by the llvm RuntimeDyld engine.
 - Dll is unloaded with a memory backup on ram.
