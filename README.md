@@ -1,6 +1,9 @@
 # LLVM Jit Pdb
 Debugging LLVM JIT code inside Visual Studio with PDB
 
+# Building
+Just copy/paste the content inside your LLVM root path and add ```JITPDB``` in ```{LLVM_ROOT}/lib/CMakeLists.txt``` and ```{LLVM_ROOT}/lib/LLVMBuild.txt``` so that CMAKE configuration adds the LLVMJITPDB project to the LLVM solution.
+
 # Getting started 
 I assume you already know what is a MemoryManager in llvm jit system. If not, follow the Kaleidoscope JIT Tutorial on LLVM.
 
