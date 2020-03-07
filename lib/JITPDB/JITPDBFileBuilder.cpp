@@ -55,6 +55,16 @@
 #define LLVM_JIT_DUMP_WITH_PDBUTIL_ENABLED 0
 #define LLVM_JIT_TEXT_SECTION_VIRTUAL_ADDRESS 0x1000
 
+namespace {
+enum class LogKind { Information, Warning, Error };
+}
+
+#define LLVM_JIT_PDB_LOG(Kind, ...)                                            \
+  if (LogKind::Kind == LogKind::Warning || LogKind::Kind == LogKind::Error) {  \
+    printf(#Kind ": " __VA_ARGS__);                                            \
+    printf("\n");                                                              \
+  }
+
 extern char JITPDB_PDB[];
 extern unsigned long long JITPDB_PDB_SIZE;
 
@@ -876,6 +886,8 @@ void InsertObjFileSections(
       Publics.push_back(createPublic(ObjFile, Sym));
   }
 
+  bool DebugInfoMissing = false;
+  bool DebugLinesMissing = true;
   const object::coff_section *section = nullptr;
   if (!ObjFile.getSection(".debug$T", section)) {
     ArrayRef<uint8_t> Contents;
@@ -883,6 +895,8 @@ void InsertObjFileSections(
     Contents = consumeDebugMagic(Contents, ".debug$T");
 
     MergeDebugT(Contents, &TypeIndexMap, IDTable, TypeTable);
+  } else {
+    DebugInfoMissing = true;
   }
   if (!ObjFile.getSection(".debug$S", section)) {
     ArrayRef<uint8_t> RelocatedDebugContents;
@@ -909,6 +923,7 @@ void InsertObjFileSections(
         BinaryStreamReader reader(SS.getRecordData());
         Lines.initialize(reader);
         modBuilder.addDebugSubsection(SS);
+        DebugLinesMissing = false;
         break;
       }
       case DebugSubsectionKind::InlineeLines: {
@@ -943,6 +958,23 @@ void InsertObjFileSections(
       NewChecksums->addChecksum(Filename, FC.Kind, FC.Checksum);
     }
     modBuilder.addDebugSubsection(std::move(NewChecksums));
+  } else {
+    DebugInfoMissing = true;
+  }
+
+  if (DebugInfoMissing) {
+    LLVM_JIT_PDB_LOG(
+        Warning,
+        "Emitted COFF file has missing CodeView debug information, PDB "
+        "might be incomplete. "
+        "Ensure you have called "
+        "llvm::Module::addModuleFlag(llvm::Module::Warning, "
+        "\"CodeView\", 1) on your llvm module");
+  } else if (DebugLinesMissing) {
+    LLVM_JIT_PDB_LOG(
+        Warning, "Debug lines are missing inside CodeView record. Don't forget "
+                 "to use a DIBuilder + IRBuilder::SetCurrentDebugLocation + "
+                 "Function::setSubprogram calls.");
   }
 
   if (section)
