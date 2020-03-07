@@ -39,7 +39,7 @@ Any help is welcome for the .dll generation part !
 
 # FAQ
 
-## I don't have visual studio breaking into my code even with a DIBuilder being setup.
+### I don't have visual studio breaking into my code even with a DIBuilder being setup.
 First, check that indeed everything in the DIBuilder has been setup correctly :
   - calls of llvm::Function::setSubprogram  
   - calls of llvm::IRBuilder::SetCurrentDebugLocation (with valid DebugLoc)
@@ -49,9 +49,10 @@ Then ensure that ```llvm::Module::addModuleFlag(Warning, "CodeView", 1)``` is in
 
 Finally, you can check both the JITPDBMemoryManager::Status and console output for better information on what is going on.  
 
-## I reach the memory code/data size limitation, what can I do ?
-If your **data** reaches the limit, I would try to replace static allocations by some heap allocations (in the case of JIT, we are generally not that hard with ourselves when it comes to memory allocation. 
-If your **code** reaches the limit, my advise would be (not only for the JIT, but in your life in general) to split your code into different reusable modules. As I said my biggest module reaches only 4% of 5MB in my personal project and I'm really confident for the future as I like to split stuff into specialized Modules for clarity.
+### I reach the memory code/data size limitation, what can I do ?
+If your **data** reaches the limit, I would try to replace static allocations by some heap allocations (when it comes to JIT, we are  generally not that picky on where memory is). If you really are stuck, you can help me providing a custom .DLL generator because I have little time to devote to this with my other projects (the .DLL embedded inside the code has been first generated with huge empty .ASM file, and oddly I can't make masm generate a larger one without freezing for decades).
+ 
+If your **code** reaches the limit, my advice would be (not only for the JIT, but in your life in general) to split your code into different reusable JIT modules (and so multiple JITPDBMemoryManager with 10MB memory each). As I said my biggest module reaches only 4% of 5MB in my personal project and I'm really confident for the future as I like to split stuff into specialized Modules for clarity.
 Another way to get around that, is to simplify bring back that large memory inside the native C++ part of your project. 
 
 # Support / Donation
