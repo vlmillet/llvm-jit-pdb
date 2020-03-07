@@ -15,13 +15,9 @@ auto MemMgr = std::make_unique<JITPDBMemoryManager>("MyModule.pdb", [](void* Emi
     printf("MyModule.dll has been loaded at 0x%p and is now debuggable", EmittedDllBaseAddress); 
   } 
 );
+```
 
-```
-And then call JITPDBMemoryManager::finalize() to load the backing .dll (see below) and make the code ready for you and visual studio to debug.
-
-```
-MemMgr->finalize(); // this will ensure a .dll is emitted and pdb loaded inside current visual studio debugger
-```
+See ```HowToUseJitWithPDB.cpp``` in the ```examples``` folder for complete working sample/tutorial
 
 # How it works
 
