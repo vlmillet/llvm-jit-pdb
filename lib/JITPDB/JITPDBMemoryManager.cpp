@@ -9,7 +9,6 @@
 #pragma warning(push, 0)
 #include <llvm/Object/COFF.h>
 #pragma warning(pop)
-
 #include <windows.h>
 
 namespace {
@@ -18,8 +17,10 @@ enum class LogKind { Information, Warning, Error };
 
 #define LLVM_JIT_PDB_LOG(Kind, ...)                                            \
   if (LogKind::Kind == LogKind::Warning || LogKind::Kind == LogKind::Error ||  \
-      Verbose)                                                                 \
-  printf(#Kind ":" __VA_ARGS__)
+      Verbose) {                                                               \
+    printf(#Kind ": " __VA_ARGS__);                                            \
+    printf("\n");                                                              \
+  }
 
 extern char JITPDB_HCK[];
 extern char JITPDB_DLL[];
@@ -408,31 +409,34 @@ uint8_t *JITPDBMemoryManager::allocateDataSection(uintptr_t Size,
 
 void JITPDBMemoryManager::notifyObjectLoaded(ExecutionEngine *EE,
                                              const object::ObjectFile &Obj) {
-  if (StatusValue == Status::Allocating)
+  if (StatusValue == Status::Allocating) {
     StatusValue = Status::ObjectFileEmitted;
-  if (Obj.isCOFF()) {
-    bool result = PDBBuilder.commit(
-        getPdbPath(), Guid, static_cast<object::COFFObjectFile const &>(Obj));
-    (void)result;
-    assert(result);
-  } else {
-    StatusValue = Status::InvalidObjectFileType;
-    LLVM_JIT_PDB_LOG(
-        Error, "Emitted object file is not a COFF file, no CodeView/PDB can be "
-               "emitted. Ensure you have called "
-               "llvm::Module::addModuleFlag(llvm::Module::Warning, "
-               "\"CodeView\", 1) on your llvm module");
+    if (Obj.isCOFF()) {
+      bool result = PDBBuilder.commit(
+          getPdbPath(), Guid, static_cast<object::COFFObjectFile const &>(Obj));
+      if (!result) {
+        StatusValue = Status::FailedToWritePDB;
+        LLVM_JIT_PDB_LOG(Error, "Failed to write PDB on disk");
+      }
+    } else {
+      StatusValue = Status::COFFObjectFileRequired;
+      LLVM_JIT_PDB_LOG(
+          Error,
+          "Emitted object file is not a pure COFF/CodeView file, no PDB can be "
+          "emitted.");
+    }
   }
 }
 
-JITPDBMemoryManager::Status JITPDBMemoryManager::finalize() {
+bool JITPDBMemoryManager::finalizeMemory(std::string *ErrMsg) {
+  if (StatusValue == Status::OK) // already finalized once
+    return false;
   assert((StatusValue == Status::ObjectFileEmitted ||
           StatusValue == Status::OutOfMemory ||
-          StatusValue == Status::InvalidObjectFileType) &&
+          StatusValue == Status::COFFObjectFileRequired) &&
          "cannot finalize while object file not emitted/loaded yet");
-  if (StatusValue == Status::OutOfMemory ||
-      StatusValue == Status::InvalidObjectFileType)
-    return StatusValue;
+  if (StatusValue == Status::OutOfMemory)
+    return true;
   reloadDll();
   if (MemoryStart !=
       (reinterpret_cast<uint8_t *>(DllBaseAddress) +
@@ -441,13 +445,12 @@ JITPDBMemoryManager::Status JITPDBMemoryManager::finalize() {
         Error, "memory not available : unable to reload backing dll in same "
                "virtual space, retry required");
     StatusValue = Status::MemoryNotReady;
+    return true;
   } else {
     StatusValue = Status::OK;
+    return false;
   }
-  return StatusValue;
 }
-
-bool JITPDBMemoryManager::finalizeMemory(std::string *ErrMsg) { return false; }
 
 uint8_t *JITPDBMemoryManager::Section::allocate(JITPDBMemoryManager *mgr,
                                                 size_t size, size_t align) {

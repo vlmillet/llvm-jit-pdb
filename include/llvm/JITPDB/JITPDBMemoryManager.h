@@ -18,7 +18,9 @@ public:
   enum class Status {
     Allocating,
     ObjectFileEmitted,
-    InvalidObjectFileType,
+    FailedToWritePDB,
+    COFFObjectFileRequired,
+    UnableToWriteDLL,
     OK,
     MemoryNotReady,
     OutOfMemory,
@@ -40,7 +42,6 @@ public:
   pdb::JITPDBFileBuilder const &getPDBFileBuilder() const { return PDBBuilder; }
 
   Status getStatus() const { return StatusValue; }
-  Status finalize();
 
 protected:
   uint8_t *allocateCodeSection(uintptr_t Size, unsigned Alignment,
