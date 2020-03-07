@@ -20,6 +20,7 @@ auto MemMgr = std::make_unique<JITPDBMemoryManager>("MyModule.pdb", [](void* Emi
 See ```HowToUseJitWithPDB.cpp``` in the ```examples``` folder for complete working sample/tutorial. In this example you can put breakpoint inside the comment code description and see visual studio break into it. It will also give you some hint on how to use correctly IR and the DIBuilder together to generate your debug infos properly.
 <br><p align="center">
 <img src="https://raw.githubusercontent.com/vlmillet/llvmjitpdb/master/doc/HowToUseJITWithPDB.gif" width=600/></p>
+<sub>callstack seems broken in add1, it's just because functions are 'return' only : VS sees add1's return as of foos's, be sure it doesn't happen otherwise</sub>
 
 # How it works
 
