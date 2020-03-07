@@ -5,7 +5,7 @@ Debugging LLVM JIT code inside Visual Studio with PDB
 Just copy/paste the content inside your LLVM root path and add ```JITPDB``` in ```{LLVM_ROOT}/lib/CMakeLists.txt``` and ```{LLVM_ROOT}/lib/LLVMBuild.txt``` so that CMAKE configuration adds the LLVMJITPDB project to the LLVM solution (repeat that for the ```HowToUseJITWithPDB``` folder)
 
 # Getting started 
-I assume you already know what is a MemoryManager inside the LLVM and its JIT systems (MCJIT / OrcJIT). If not, follow the Kaleidoscope JIT Tutorial on LLVM.
+I assume you already know what is a MemoryManager inside LLVM and its JIT systems (MCJIT / OrcJIT). If not, follow the Kaleidoscope JIT Tutorial on LLVM.
 
 Just create a ```JITPDBMemoryManager``` and use it either in your MCJIT or OrcJit setup. (I've only tried MCJIT right now, please let me know if something doesn't work with OrcJIT, the project is quite young).
 
@@ -18,6 +18,8 @@ auto MemMgr = std::make_unique<JITPDBMemoryManager>("MyModule.pdb", [](void* Emi
 ```
 
 See ```HowToUseJitWithPDB.cpp``` in the ```examples``` folder for complete working sample/tutorial. In this example you can put breakpoint inside the comment code description and see visual studio break into it. It will also give you some hint on how to use correctly IR and the DIBuilder together to generate your debug infos properly.
+<br><p align="center">
+<img src="https://raw.githubusercontent.com/vlmillet/llvmjitpdb/master/doc/HowToUseJITWithPDB.gif" width=600/></p>
 
 # How it works
 
