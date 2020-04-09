@@ -435,7 +435,8 @@ bool JITPDBMemoryManager::finalizeMemory(std::string *ErrMsg) {
           StatusValue == Status::OutOfMemory ||
           StatusValue == Status::COFFObjectFileRequired) &&
          "cannot finalize while object file not emitted/loaded yet");
-  if (StatusValue == Status::OutOfMemory)
+  if (StatusValue == Status::OutOfMemory ||
+      StatusValue == Status::MemoryNotReady)
     return true;
   reloadDll();
   if (MemoryStart !=
