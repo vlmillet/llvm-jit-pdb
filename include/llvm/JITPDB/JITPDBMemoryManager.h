@@ -36,7 +36,10 @@ public:
   std::string const &getDllPath() const { return DllPath; }
   std::string const &getOutputPath() const { return OutputPath; }
 
-  JITPDBMemoryManager &setVerbose(bool Verbose) { this->Verbose = Verbose; }
+  JITPDBMemoryManager &setVerbose(bool Verbose) {
+    this->Verbose = Verbose;
+    return *this;
+  }
 
   pdb::JITPDBFileBuilder &getPDBFileBuilder() { return PDBBuilder; }
   pdb::JITPDBFileBuilder const &getPDBFileBuilder() const { return PDBBuilder; }
