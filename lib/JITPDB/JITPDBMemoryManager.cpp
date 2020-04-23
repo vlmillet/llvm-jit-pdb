@@ -412,11 +412,14 @@ void JITPDBMemoryManager::notifyObjectLoaded(ExecutionEngine *EE,
   if (StatusValue == Status::Allocating) {
     StatusValue = Status::ObjectFileEmitted;
     if (Obj.isCOFF()) {
-      bool result = PDBBuilder.commit(
-          getPdbPath(), Guid, static_cast<object::COFFObjectFile const &>(Obj));
-      if (!result) {
-        StatusValue = Status::FailedToWritePDB;
-        LLVM_JIT_PDB_LOG(Error, "Failed to write PDB on disk");
+      if (!PDBDontEmit) {
+        bool result =
+            PDBBuilder.commit(getPdbPath(), Guid,
+                              static_cast<object::COFFObjectFile const &>(Obj));
+        if (!result) {
+          StatusValue = Status::FailedToWritePDB;
+          LLVM_JIT_PDB_LOG(Error, "Failed to write PDB on disk");
+        }
       }
     } else {
       StatusValue = Status::COFFObjectFileRequired;

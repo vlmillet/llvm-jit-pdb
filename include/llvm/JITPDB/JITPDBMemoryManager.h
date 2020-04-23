@@ -40,6 +40,10 @@ public:
     this->Verbose = Verbose;
     return *this;
   }
+  JITPDBMemoryManager &setDontEmitPDBFile(bool Dont) {
+    this->PDBDontEmit = Dont;
+    return *this;
+  }
 
   pdb::JITPDBFileBuilder &getPDBFileBuilder() { return PDBBuilder; }
   pdb::JITPDBFileBuilder const &getPDBFileBuilder() const { return PDBBuilder; }
@@ -110,6 +114,7 @@ private:
   std::function<void(void *)> NotifyModuleEmitted;
   Status StatusValue = Status::Allocating;
   bool Verbose = false;
+  bool PDBDontEmit = false;
 };
 
 } // namespace llvm
