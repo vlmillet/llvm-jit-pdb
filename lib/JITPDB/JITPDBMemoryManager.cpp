@@ -456,10 +456,18 @@ bool JITPDBMemoryManager::finalizeMemory(std::string *ErrMsg) {
   }
 }
 
+namespace {
+inline uint8_t *AlignUp(uint8_t *value, size_t alignment) {
+  size_t mask = alignment - 1;
+  return reinterpret_cast<uint8_t *>((size_t(value) + mask) & ~mask);
+}
+} // namespace
+
 uint8_t *JITPDBMemoryManager::Section::allocate(JITPDBMemoryManager *mgr,
                                                 size_t size, size_t align) {
   assert(mgr->StatusValue == Status::Allocating);
   assert(cur != nullptr);
+  cur = AlignUp(cur, align);
   if ((cur + size) < (((uint8_t *)mem.addr) + mem.size)) {
     uint8_t *ptr = cur;
     cur = ptr + size;
