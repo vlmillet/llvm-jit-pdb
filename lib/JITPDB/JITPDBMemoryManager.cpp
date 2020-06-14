@@ -129,8 +129,10 @@ std::string guidToStr(codeview::GUID const &guid) {
 
 } // namespace
 JITPDBMemoryManager::JITPDBMemoryManager(
-    StringRef PdbPath, std::function<void(void *)> NotifyModuleEmittedCB)
-    : PdbPath(PdbPath), NotifyModuleEmitted(NotifyModuleEmittedCB) {
+    StringRef PdbOutputPath, StringRef PdbTemplatePath,
+    std::function<void(void *)> NotifyModuleEmittedCB)
+    : PdbPath(PdbOutputPath), NotifyModuleEmitted(NotifyModuleEmittedCB),
+      PdbTplPath(PdbTemplatePath) {
   // auto& NextGUID = getNextBuildGuid();
 #define PDB_GUID_TEST 0
 #if PDB_GUID_TEST
@@ -155,9 +157,24 @@ JITPDBMemoryManager::JITPDBMemoryManager(
   DllPath = PdbPath.substr(0, PdbPath.find_last_of('.'));
   DllPath += ".dll";
 
+  if (PdbTplPath.empty()) {
+    memcpy(&DllHackInfoData, JITPDB_HCK, sizeof(DllHackInfo));
+  } else {
+    DllTplPath = PdbTplPath.substr(0, PdbTplPath.find_last_of('.'));
+    DllTplPath += ".dll";
+    auto HckFilePath = PdbTplPath.substr(0, PdbTplPath.find_last_of('.'));
+    HckFilePath += ".hck";
+    FILE *hckFD = fopen(HckFilePath.c_str(), "rb");
+    if (!hckFD) {
+      LLVM_JIT_PDB_LOG(Error, "missing %s file", HckFilePath.c_str());
+      return;
+    }
+    fread(&DllHackInfoData, 1, sizeof(DllHackInfo), hckFD);
+    fclose(hckFD);
+  }
+
   // read hack inf (generated .cpp file contains the data related to dll/pdb
   // hacking offsets)
-  memcpy(&DllHackInfoData, JITPDB_HCK, sizeof(DllHackInfo));
 
   // we use only the backing dll .text section for storing code+dataR+dataRW
   MemorySize = DllHackInfoData.SectionInfos[DllHackInfo::TEXT].Size;
@@ -185,15 +202,31 @@ JITPDBMemoryManager::~JITPDBMemoryManager() {
 }
 
 void JITPDBMemoryManager::createDll() {
-  FILE *fn = NULL;
+  FILE *DllFile = NULL;
   int remainingTries = 10;
   while (remainingTries--) {
 #pragma warning(push, 0)
-    if ((fn = fopen(DllPath.c_str(), "wb")))
+    if ((DllFile = fopen(DllPath.c_str(), "wb")))
 #pragma warning(pop)
     {
-      fwrite(JITPDB_DLL, JITPDB_DLL_SIZE, 1, fn);
-      fclose(fn);
+      if (DllTplPath.empty()) {
+        fwrite(JITPDB_DLL, JITPDB_DLL_SIZE, 1, DllFile);
+      } else {
+        FILE *DllTplFile = fopen(DllTplPath.c_str(), "rb");
+        if (DllTplFile == nullptr) {
+          LLVM_JIT_PDB_LOG(Error, "cannot find %s", DllTplPath.c_str());
+          return;
+        }
+        fseek(DllTplFile, 0, SEEK_END);
+        size_t S = ftell(DllTplFile);
+        rewind(DllTplFile);
+        void *M = malloc(S);
+        fread(M, 1, S, DllTplFile);
+        fwrite(M, 1, S, DllFile);
+        fclose(DllTplFile);
+      }
+      fclose(DllFile);
+
       break;
     }
   }
@@ -405,9 +438,9 @@ void JITPDBMemoryManager::notifyObjectLoaded(ExecutionEngine *EE,
     StatusValue = Status::ObjectFileEmitted;
     if (Obj.isCOFF()) {
       if (!PDBDontEmit) {
-        bool result =
-            PDBBuilder.commit(getPdbPath(), Guid,
-                              static_cast<object::COFFObjectFile const &>(Obj));
+        bool result = PDBBuilder.commit(
+            getPdbPath(), Guid,
+            static_cast<object::COFFObjectFile const &>(Obj), PdbTplPath);
         if (!result) {
           StatusValue = Status::FailedToWritePDB;
           LLVM_JIT_PDB_LOG(Error, "Failed to write PDB on disk");

@@ -26,7 +26,7 @@ public:
     OutOfMemory,
   };
 
-  JITPDBMemoryManager(StringRef PdbPath,
+  JITPDBMemoryManager(StringRef PdbOutputPath, StringRef DllTemplatePath = StringRef(),
                       std::function<void(void *)> NotifyModuleEmittedCB =
                           std::function<void(void *)>());
   ~JITPDBMemoryManager();
@@ -111,7 +111,9 @@ private:
   std::string PdbName;
   std::string OutputPath;
   std::string DllPath;
-  std::function<void(void *)> NotifyModuleEmitted;
+  std::string PdbTplPath;
+  std::string DllTplPath;
+  std::function<void(void*)> NotifyModuleEmitted;
   Status StatusValue = Status::Allocating;
   bool Verbose = false;
   bool PDBDontEmit = false;

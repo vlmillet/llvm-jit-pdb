@@ -30,19 +30,20 @@ class JITPDBMemoryManager;
 namespace pdb {
 class JITPDBFileBuilder {
 public:
-  bool commit(llvm::StringRef PdbPath, llvm::codeview::GUID Guid,
-              llvm::object::COFFObjectFile const &ObjFile);
-  void addNatvisFile(llvm::StringRef _filePath);
-  void addNatvisBuffer(llvm::StringRef _filePath,
-                       std::unique_ptr<llvm::MemoryBuffer> _fileData);
+  bool commit(StringRef PdbPath, codeview::GUID Guid,
+              object::COFFObjectFile const &ObjFile,
+              StringRef PdbTplPath = StringRef());
+  void addNatvisFile(StringRef _filePath);
+  void addNatvisBuffer(StringRef _filePath,
+                       std::unique_ptr<MemoryBuffer> _fileData);
 
 private:
-  bool EmitPDBImpl(llvm::StringRef PdbPath, llvm::codeview::GUID Guid,
-                   object::COFFObjectFile const &ObjFile, uint64_t ImageBase);
+  bool EmitPDBImpl(StringRef PdbPath, codeview::GUID Guid,
+                   object::COFFObjectFile const &ObjFile, uint64_t ImageBase,
+                   StringRef PdbTplPath);
 
 private:
-  llvm::SmallVector<std::pair<std::string, std::unique_ptr<llvm::MemoryBuffer>>,
-                    1>
+  SmallVector<std::pair<std::string, std::unique_ptr<MemoryBuffer>>, 1>
       NatvisFiles;
 };
 } // namespace pdb

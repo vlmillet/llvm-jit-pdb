@@ -283,13 +283,22 @@ void addLinkerModuleSectionSymbol(pdb::DbiModuleDescriptorBuilder &Mod,
       Sym, Allocator, CodeViewContainer::Pdb));
 }
 
-PDBFile *LoadCppEmbeddedPDB(std::unique_ptr<IPDBSession> &Session) {
-  auto buffer = MemoryBuffer::getMemBuffer(
-      StringRef(JITPDB_PDB, JITPDB_PDB_SIZE), "", false);
+PDBFile *LoadCppEmbeddedPDB(std::unique_ptr<IPDBSession> &Session,
+                            StringRef PdbTplPath) {
 
-  if (auto E = pdb::NativeSession::createFromPdb(std::move(buffer), Session))
-    return nullptr;
-
+  if (PdbTplPath.empty()) {
+    auto buffer = MemoryBuffer::getMemBuffer(
+        StringRef(JITPDB_PDB, JITPDB_PDB_SIZE), "", false);
+    if (auto E = pdb::NativeSession::createFromPdb(std::move(buffer), Session))
+      return nullptr;
+  } else {
+    auto errorOrBuffer = MemoryBuffer::getFile(PdbTplPath);
+    if (!errorOrBuffer)
+      return nullptr;
+    if (auto E = pdb::NativeSession::createFromPdb(std::move(*errorOrBuffer),
+                                                   Session))
+      return nullptr;
+  }
   NativeSession *NS = static_cast<NativeSession *>(Session.get());
   return &NS->getPDBFile();
 }
@@ -1025,10 +1034,10 @@ translateStringTableIndex(uint32_t ObjIndex,
 namespace pdb {
 bool JITPDBFileBuilder::EmitPDBImpl(StringRef PdbPath, codeview::GUID PdbGuid,
                                     object::COFFObjectFile const &ObjFile,
-                                    uint64_t ImageBase) {
+                                    uint64_t ImageBase, StringRef PdbTplPath) {
   std::string PdbPathStr(PdbPath);
   std::unique_ptr<IPDBSession> Session;
-  PDBFile *FileP = LoadCppEmbeddedPDB(Session);
+  PDBFile *FileP = LoadCppEmbeddedPDB(Session, PdbTplPath);
   if (!FileP)
     return false;
 
@@ -1176,8 +1185,10 @@ bool JITPDBFileBuilder::EmitPDBImpl(StringRef PdbPath, codeview::GUID PdbGuid,
   return false;
 }
 bool JITPDBFileBuilder::commit(StringRef PdbPath, codeview::GUID Guid,
-                               object::COFFObjectFile const &ObjFile) {
-  return EmitPDBImpl(PdbPath, Guid, ObjFile, uint64_t(GetModuleHandle(NULL)));
+                               object::COFFObjectFile const &ObjFile,
+                               llvm::StringRef PdbTplPath) {
+  return EmitPDBImpl(PdbPath, Guid, ObjFile, uint64_t(GetModuleHandle(NULL)),
+                     PdbTplPath);
 }
 
 void JITPDBFileBuilder::addNatvisFile(StringRef _filePath) {
