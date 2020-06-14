@@ -290,14 +290,6 @@ void JITPDBMemoryManager::reloadDll() {
 
   // go to unwind data pos in file and write the new unwind data here
   // first zero memory
-  char zero = 0;
-  fseek(dllFD,
-        DllHackInfoData.SectionInfos[DllHackInfo::RDATA].FilePos +
-            offsetOtUnwindInfosInRData,
-        0);
-  fwrite(&zero, 1, DllHackInfoData.SectionInfos[DllHackInfo::XDATA].Size,
-         dllFD);
-  // then copy
   fseek(dllFD,
         DllHackInfoData.SectionInfos[DllHackInfo::RDATA].FilePos +
             offsetOtUnwindInfosInRData,
@@ -468,7 +460,7 @@ uint8_t *JITPDBMemoryManager::Section::allocate(JITPDBMemoryManager *mgr,
   assert(mgr->StatusValue == Status::Allocating);
   assert(cur != nullptr);
   cur = AlignUp(cur, align);
-  if ((cur + size) < (((uint8_t *)mem.addr) + mem.size)) {
+  if ((cur + size) < (mem.addr + mem.size)) {
     uint8_t *ptr = cur;
     cur = ptr + size;
     return ptr;
