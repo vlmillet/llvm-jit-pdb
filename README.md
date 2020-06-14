@@ -33,12 +33,7 @@ LLVM Jit Pdb works like this :
 - Dll is reloaded with everything coming back at the same VirtualSpace it has been written (by chance).
 - This triggers PDB loading inside visual studio and a great C++/Script interleaved debug experience. 
 
-The embedded .dll and .pdb data have limitation in size for now as I'm not an expert in creating .dll from scratch. The limitation is around 5MB for code and 5MB for data. It might seem little, but I personnally only reach 4% of code and 1% data on my personal project.
-You can enable the Verbose property on the memory manager to follow your memory consumption.
-I've chosen this for a start and because it is quite light for distribution.
-I'm planning to learn more about .dll generation from zero and propose more size configuration options in the future. 
-
-Any help is welcome for the .dll generation part !
+The embedded .dll and .pdb data have limitation in size for now as I'm not an expert in creating .dll from scratch. The limitation is around 8MB for code and 8MB for data. It might seem little, but I personnally only reach 9% of code and 8% data on my personal project which is a game editor.You can enable the Verbose property on the memory manager to follow your memory consumption.
 
 # FAQ
 
@@ -53,10 +48,14 @@ Then ensure that ```llvm::Module::addModuleFlag(Warning, "CodeView", 1)``` is in
 Finally, you can check both the JITPDBMemoryManager::Status and console output for better information on what is going on.  
 
 ### I reach the memory code/data size limitation, what can I do ?
-If your **data** reaches the limit, I would try to replace static allocations by some heap allocations (when it comes to JIT, we are  generally not that picky on where memory is). If you really are stuck, you can help me providing a custom .DLL generator because I have little time to devote to this with my other projects (the .DLL embedded inside the code has been first generated with huge empty .ASM file, and oddly I can't make masm generate a larger one without freezing for decades).
+A new tool called "jitpdb-genmemcpp.exe" is available for you to generate your own EMBEDDED_DLL.cpp and EMBEDDED_PDB.cpp to replace the one by default in this repo. These files contains embedded .dll/.pdb templates. By default they provide approximately 16MB of memory for jit. See "jitpdb-genmemcpp.exe" usage.
+
+But my personal advices would be :
+
+If your **data** reaches the limit, I would try to replace static allocations by some heap allocations (when it comes to JIT, we are  generally not that picky on where memory is). 
  
-If your **code** reaches the limit, my advice would be (not only for the JIT, but in your life in general) to split your code into different reusable JIT modules (and so multiple JITPDBMemoryManager with 10MB memory each). As I said my biggest module reaches only 4% of 5MB in my personal project and I'm really confident for the future as I like to split stuff into specialized Modules for clarity.
-Another way to get around that, is to simplify bring back that large memory inside the native C++ part of your project. 
+If your **code** reaches the limit, my advice would be (not only for the JIT, but in your life in general) to split your code into different reusable JIT modules (and so multiple JITPDBMemoryManager with 16MB memory each). As I said my biggest module reaches only 9% of 8MB in my personal project and I'm really confident for the future as I like to split stuff into specialized Modules for clarity.
+Another way to get around that, more advanced but a cool feature, is to transpile your most stable code to native code. 
 
 # Support / Donation
 
