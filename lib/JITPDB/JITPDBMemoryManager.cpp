@@ -311,6 +311,17 @@ void JITPDBMemoryManager::reloadDll() {
   size_t supposedCount = RFDataSize / sizeof(RUNTIME_FUNCTION);
   size_t realCount = 0;
 
+  // try to figure out how many RUNTIME_FUNCTION really are inside the pdata
+  // section (we check function bounds for weird values)
+  for (auto i = 0; i < supposedCount; ++i) {
+    int funcSize =
+        int(functions[i].EndAddress) - int(functions[i].BeginAddress);
+    if (funcSize < 0 || funcSize >= 65536) {
+      supposedCount = i;
+      break;
+    }
+  }
+
   // copy old unwind infos from .dll .pdata section (this allows us to see where
   // unwind infos start)
   fseek(dllFD, DllHackInfoData.SectionInfos[DllHackInfo::PDATA].FilePos, 0);
@@ -352,6 +363,10 @@ void JITPDBMemoryManager::reloadDll() {
 #undef min
   realCount = std::min(maxCount, realCount);
 
+  char zero = 0;
+  fseek(dllFD, DllHackInfoData.SectionInfos[DllHackInfo::PDATA].FilePos, 0);
+  fwrite(&zero, 1, sizeof(RUNTIME_FUNCTION) * maxCount, dllFD);
+
   fseek(dllFD, DllHackInfoData.SectionInfos[DllHackInfo::PDATA].FilePos, 0);
   fwrite(functions, sizeof(RUNTIME_FUNCTION) * realCount, 1, dllFD);
 
@@ -387,10 +402,14 @@ void JITPDBMemoryManager::reloadDll() {
   loadDll();
 
   imageBase = (ULONG_PTR)DllBaseAddress;
-  assert(RtlLookupFunctionEntry(
+  auto rtlCheck = RtlLookupFunctionEntry(
       uint64_t(reinterpret_cast<uint8_t *>(DllBaseAddress) +
                DllHackInfoData.SectionInfos[DllHackInfo::TEXT].VirtualAddress),
-      &imageBase, NULL));
+      &imageBase, NULL);
+  if (!rtlCheck) {
+    LLVM_JIT_PDB_LOG(
+        Error, "Rtl Lookup failed, unwind infos was not exported correctly");
+  }
 }
 
 void JITPDBMemoryManager::loadDll() {
