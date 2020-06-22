@@ -363,10 +363,6 @@ void JITPDBMemoryManager::reloadDll() {
 #undef min
   realCount = std::min(maxCount, realCount);
 
-  char zero = 0;
-  fseek(dllFD, DllHackInfoData.SectionInfos[DllHackInfo::PDATA].FilePos, 0);
-  fwrite(&zero, 1, sizeof(RUNTIME_FUNCTION) * maxCount, dllFD);
-
   fseek(dllFD, DllHackInfoData.SectionInfos[DllHackInfo::PDATA].FilePos, 0);
   fwrite(functions, sizeof(RUNTIME_FUNCTION) * realCount, 1, dllFD);
 
