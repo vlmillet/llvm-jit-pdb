@@ -56,7 +56,7 @@ Then ensure that ```llvm::Module::addModuleFlag(Warning, "CodeView", 1)``` is in
 Finally, you can check both the JITPDBMemoryManager::Status and console output for better information on what is going on.  
 
 ### I reach the memory code/data size limitation, what can I do ?
-A new tool called "jitmemgen.exe" is available for you to generate your own EMBEDDED_DLL.cpp and EMBEDDED_PDB.cpp (if you want to replace the default embedded memory in this repo) and standalone .pdb/.dll/.hck (if you want to use standalone files as memory templates). By default embedded data provides approximately 16MB (8MB for code, 8MB for data). See "jitmem.exe" usage.
+A new tool called "jitmemgen.exe" is available for you to generate your own EMBEDDED_DLL.cpp and EMBEDDED_PDB.cpp (if you want to replace the default embedded memory in this repo) and standalone .pdb/.dll/.hck (if you want to use standalone files as memory templates). By default embedded data provides approximately 16MB (8MB for code, 8MB for data). See "jitmemgen.exe" usage.
 
 But my personal advices would be :
 
