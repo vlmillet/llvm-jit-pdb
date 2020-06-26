@@ -390,8 +390,13 @@ void JITPDBMemoryManager::reloadDll() {
   std::string guidStr(guidToStr(Guid));
 
   // rewrite PDB path
+
+  std::string WinPdbPath = PdbPath;
+  for (auto &c : WinPdbPath)
+    if (c == '/')
+      c = '\\';
   fseek(dllFD, DllHackInfoData.PdbFileNamePos, 0);
-  fwrite(PdbName.data(), PdbName.size() + 1, 1, dllFD);
+  fwrite(WinPdbPath.data(), WinPdbPath.size() + 1, 1, dllFD);
 
   fclose(dllFD);
 
