@@ -43,7 +43,8 @@
 #include <llvm/Object/ObjectFile.h>
 #include <llvm/Support/BinaryStream.h>
 #include <llvm/Support/BinaryStreamWriter.h>
-#include <llvm/Support/JamCRC.h>
+#include <llvm/Support/CRC.h>
+#include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
 #include <llvm/Support/xxhash.h>
 #include <map>
@@ -443,8 +444,8 @@ pdb::SectionContrib createSectionContrib(object::COFFObjectFile const &ObjFile,
   ArrayRef<uint8_t> Contents;
   ObjFile.getSectionContents(Header, Contents);
   JamCRC CRC(0);
-  ArrayRef<char> CharContents = makeArrayRef(
-      reinterpret_cast<const char *>(Contents.data()), Contents.size());
+  ArrayRef<uint8_t> CharContents = makeArrayRef(
+      reinterpret_cast<const uint8_t *>(Contents.data()), Contents.size());
   CRC.update(CharContents);
   SC.DataCrc = CRC.getCRC();
 
@@ -467,7 +468,9 @@ void InsertObjFileSectionHeaders(object::COFFObjectFile const &ObjFile,
   size_t startVirtualAddress = LLVM_JIT_TEXT_SECTION_VIRTUAL_ADDRESS;
   for (const object::SectionRef &Section : ObjFile.sections()) {
     StringRef SectionName;
-    if (std::error_code E = Section.getName(SectionName))
+    if (auto E = Section.getName()) {
+      SectionName = *E;
+    } else
       continue;
     auto sec = ObjFile.getCOFFSection(Section);
     if (".debug$S" == SectionName) {
@@ -545,7 +548,8 @@ void translateIdSymbols(MutableArrayRef<uint8_t> &RecordData,
   if (Kind == SymbolKind::S_GPROC32_ID || Kind == SymbolKind::S_LPROC32_ID) {
     SmallVector<TiReference, 1> Refs;
     auto Content = RecordData.drop_front(sizeof(RecordPrefix));
-    CVSymbol Sym(Kind, RecordData);
+
+    CVSymbol Sym(Prefix, sizeof(RecordPrefix));
     discoverTypeIndicesInSymbol(Sym, Refs);
     assert(Refs.size() == 1);
     assert(Refs.front().Count == 1);
@@ -784,7 +788,7 @@ bool mergeSymbolRecords(PDBFileBuilder &pdbBuilder,
         MutableArrayRef<uint8_t> RecordBytes;
         if (NeedsRealignment) {
           RecordBytes = copyAndAlignSymbol(Sym, AlignedSymbolMem);
-          Sym = CVSymbol(Sym.kind(), RecordBytes);
+          Sym = CVSymbol(RecordBytes);
         } else {
           // Otherwise, we can actually mutate the symbol directly, since we
           // copied it to apply relocations.
@@ -807,7 +811,7 @@ bool mergeSymbolRecords(PDBFileBuilder &pdbBuilder,
         // An object file may have S_xxx_ID symbols, but these get converted to
         // "real" symbols in a PDB.
         translateIdSymbols(RecordBytes, IDTable);
-        Sym = CVSymbol(symbolKind(RecordBytes), RecordBytes);
+        Sym = CVSymbol(RecordBytes);
 
         // If this record refers to an offset in the object file's string table,
         // add that item to the global PDB string table and_ re-write the index.
@@ -868,13 +872,29 @@ void MergeDebugT(ArrayRef<uint8_t> Data, CVIndexMap *ObjectIndexMap,
 PublicSym32 createPublic(object::COFFObjectFile const &File,
                          object::COFFSymbolRef Sym) {
   PublicSym32 Pub(SymbolKind::S_PUB32);
-  File.getSymbolName(Sym, Pub.Name);
+  Pub.Name = *File.getSymbolName(Sym);
   if (Sym.isFunctionDefinition())
     Pub.Flags = PublicSymFlags::Function;
 
   Pub.Offset = Sym.getValue();
   Pub.Segment = Sym.getSectionNumber();
   return Pub;
+}
+
+object::coff_section const *getSection(object::COFFObjectFile const &This,
+                                       StringRef SectionName) {
+  object::coff_section const *Result = nullptr;
+  for (const object::SectionRef &Section : This.sections()) {
+    auto NameOrErr = Section.getName();
+    if (!NameOrErr)
+      return nullptr;
+
+    if (*NameOrErr == SectionName) {
+      Result = This.getCOFFSection(Section);
+      return Result;
+    }
+  }
+  return nullptr;
 }
 
 void InsertObjFileSections(
@@ -897,21 +917,21 @@ void InsertObjFileSections(
 
   bool DebugInfoMissing = false;
   bool DebugLinesMissing = true;
-  const object::coff_section *section = nullptr;
-  if (!ObjFile.getSection(".debug$T", section)) {
+  const object::coff_section *S = nullptr;
+  if ((S = getSection(ObjFile, ".debug$T"))) {
     ArrayRef<uint8_t> Contents;
-    ObjFile.getSectionContents(section, Contents);
+    ObjFile.getSectionContents(S, Contents);
     Contents = consumeDebugMagic(Contents, ".debug$T");
 
     MergeDebugT(Contents, &TypeIndexMap, IDTable, TypeTable);
   } else {
     DebugInfoMissing = true;
   }
-  if (!ObjFile.getSection(".debug$S", section)) {
+  if ((S = getSection(ObjFile, ".debug$S"))) {
     ArrayRef<uint8_t> RelocatedDebugContents;
-    ObjFile.getSectionContents(section, RelocatedDebugContents);
+    ObjFile.getSectionContents(S, RelocatedDebugContents);
     RelocatedDebugContents = consumeDebugMagic(
-        relocateDebugChunk(ObjFile, Allocator, *section), ".debug$S");
+        relocateDebugChunk(ObjFile, Allocator, *S), ".debug$S");
 
     BinaryStreamReader Reader(RelocatedDebugContents, support::little);
     Reader.readArray(Subsections, RelocatedDebugContents.size());
@@ -959,8 +979,8 @@ void InsertObjFileSections(
         break;
       }
     }
-    auto NewChecksums =
-        make_unique<DebugChecksumsSubsection>(*StringsAndChecksum.strings());
+    auto NewChecksums = std::make_unique<DebugChecksumsSubsection>(
+        *StringsAndChecksum.strings());
     for (FileChecksumEntry &FC : Checksums) {
       StringRef Filename = *CVStrTab.getString(FC.FileNameOffset);
       pdbBuilder.getDbiBuilder().addModuleSourceFile(modBuilder, Filename);
@@ -986,19 +1006,18 @@ void InsertObjFileSections(
                  "Function::setSubprogram calls.");
   }
 
-  if (section)
+  if (S)
     for (const object::SectionRef &Section : ObjFile.sections()) {
-      StringRef SectionName;
-      if (std::error_code E = Section.getName(SectionName))
-        continue;
-      if (".debug$S" == SectionName || ".debug$T" == SectionName)
-        continue;
-      auto sec = ObjFile.getCOFFSection(Section);
-      pdb::SectionContrib SC = createSectionContrib(
-          ObjFile, sec, ++sectionIdx, modBuilder.getModuleIndex());
-      pdbBuilder.getDbiBuilder().addSectionContrib(SC);
-      if (sectionIdx == 1)
-        modBuilder.setFirstSectionContrib(SC);
+      if (auto SectionName = Section.getName()) {
+        if (".debug$S" == *SectionName || ".debug$T" == *SectionName)
+          continue;
+        auto sec = ObjFile.getCOFFSection(Section);
+        pdb::SectionContrib SC = createSectionContrib(
+            ObjFile, sec, ++sectionIdx, modBuilder.getModuleIndex());
+        pdbBuilder.getDbiBuilder().addSectionContrib(SC);
+        if (sectionIdx == 1)
+          modBuilder.setFirstSectionContrib(SC);
+      }
     }
 }
 
@@ -1049,7 +1068,6 @@ bool JITPDBFileBuilder::EmitPDBImpl(StringRef PdbPath, codeview::GUID PdbGuid,
   ArrayRef<object::coff_section> DBISections;
   ArrayRef<uint8_t> AllSectionHeaderData;
   std::vector<object::coff_section> AllSections;
-  std::vector<SecMapEntry> SectionMap;
   std::vector<ModuleDebugStreamRef> ModuleDebugStreams;
   PDBFileBuilder pdbBuilder(Allocator);
 
@@ -1113,8 +1131,20 @@ bool JITPDBFileBuilder::EmitPDBImpl(StringRef PdbPath, codeview::GUID PdbGuid,
                 [](const PublicSym32 &L, const PublicSym32 &R) {
                   return L.Name < R.Name;
                 });
-      for (const PublicSym32 &Pub : Publics)
-        pdbBuilder.getGsiBuilder().addPublicSymbol(Pub);
+
+      std::vector<BulkPublic> pubs;
+      pubs.reserve(Publics.size());
+      for (const PublicSym32 &Pub : Publics) {
+        BulkPublic p;
+        p.Flags = (uint16_t)Pub.Flags;
+        p.Name = Pub.Name.data();
+        p.NameLen = Pub.Name.size();
+        p.Offset = Pub.Offset;
+        p.Segment = Pub.Segment;
+        p.SymOffset = Pub.RecordOffset;
+        pubs.push_back(p);
+      }
+      pdbBuilder.getGsiBuilder().addPublicSymbols(std::move(pubs));
     }
 #endif
 
@@ -1122,8 +1152,7 @@ bool JITPDBFileBuilder::EmitPDBImpl(StringRef PdbPath, codeview::GUID PdbGuid,
         ArrayRef<uint8_t>((uint8_t *)AllSections.data(),
                           AllSections.size() * sizeof(object::coff_section));
 
-    SectionMap = DbiStreamBuilder::createSectionMap(AllSections);
-    builder.setSectionMap(SectionMap);
+    builder.createSectionMap(AllSections);
     builder.addDbgStream(DbgHeaderType::SectionHdr, AllSectionHeaderData);
 #endif
     // * LINKER * special

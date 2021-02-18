@@ -8,6 +8,7 @@
 
 #pragma warning(push, 0)
 #include <llvm/Object/COFF.h>
+#include <llvm/Support/FileSystem.h>
 #pragma warning(pop)
 #include <windows.h>
 
@@ -496,6 +497,7 @@ bool JITPDBMemoryManager::finalizeMemory(std::string *ErrMsg) {
     StatusValue = Status::MemoryNotReady;
     return true;
   } else {
+    NotifyModuleEmitted(DllBaseAddress);
     StatusValue = Status::OK;
     return false;
   }
